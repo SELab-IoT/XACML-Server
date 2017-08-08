@@ -6,18 +6,32 @@ import org.wso2.balana.combine.CombiningAlgFactory;
 import org.wso2.balana.cond.FunctionFactoryProxy;
 
 import java.io.File;
+import java.sql.*;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
 
 public class PDPInterface {
 
     private static PDPInterface pdpInterface;
-    private PDP pdp;
+    private HashMap<String, PDP> pdpHashMap;
     private Balana balana;
+    Connection conn;
 
     //Thread-safe singleton
     public static PDPInterface getInstance() {
         return pdpInterface = Singleton.instance;
     }
     private PDPInterface() {
+        try {
+            conn = DriverManager.getConnection("jdbc:mysql://localhost:3306/pdp?autoReconnect=true&useSSL=false&" +
+                    "user=finder&password=asdasd");
+            pdpHashMap = new HashMap<>();
+        } catch (SQLException e) {
+            conn = null;
+            e.printStackTrace();
+        }
+
         initBalana();
     }
     private static class Singleton{
@@ -29,13 +43,54 @@ public class PDPInterface {
         // 매번 생성하는 로드를 줄이기 위한 방법을 검토해볼 것.
         // (예를들어, 현재 PDP와 pdpConfigName이 같다면 재활용 한다던지...
         // 단 같은 이름이어도 config.xml이 수정될수도 있으니 유의해야함)
-        pdp = getPDPNewInstance(getPDPConfigName(pepId));
-        return pdp.evaluate(request);
+        String pdpName = getPDPConfigName(pepId);
+        if (pdpName != null) {
+            PDP pdp = pdpHashMap.get(pdpName);
+            return pdp.evaluate(request);
+        } else {
+            System.out.println("pdpName is null");
+            return null;
+        }
     }
 
-    // 나중에 PEP ID를 통해 PDP Config 명을 조회하는 규칙 작성 필요.
     private String getPDPConfigName(String pepId) {
-        return pepId;
+
+        Statement stmt = null;
+        ResultSet rs = null;
+        String query = "SELECT name FROM pdp JOIN pep on pep.pdp_id=pdp._id where pep_id='" + pepId + "'";
+        String pdpName = null;
+        try {
+            stmt = conn.createStatement();
+            rs = stmt.executeQuery(query);
+            while (rs.next()) {
+                String name = rs.getString(1);
+                pdpName = name;
+            }
+
+        } catch (SQLException ex) {
+//                System.out.println("SQLException: " + ex.getMessage());
+//                System.out.println("SQLState: " + ex.getSQLState());
+//                System.out.println("VendorError: " + ex.getErrorCode());
+        } finally {
+            if (rs != null) {
+                try {
+                    rs.close();
+                } catch (SQLException sqlEx) {
+                } // ignore
+
+                rs = null;
+            }
+
+            if (stmt != null) {
+                try {
+                    stmt.close();
+                } catch (SQLException sqlEx) {
+                } // ignore
+
+                stmt = null;
+            }
+        }
+        return pdpName;
     }
 
     private PDP getPDPNewInstance(String pdpConfigName) {
@@ -45,7 +100,7 @@ public class PDPInterface {
     }
 
     // API 2 ? (이 부분 API로 따야하는지?)
-    public boolean reloadBalana(String pdpConfigName, String attributeFactoryName, String functionFactoryName) {
+    private boolean reloadBalana(String pdpConfigName, String attributeFactoryName, String functionFactoryName) {
         try {
             ConfigurationStore configurationStore = new ConfigurationStore();
             if (configurationStore != null) {
@@ -79,6 +134,17 @@ public class PDPInterface {
         }
     }
 
+    //TODO: rest api로 제공 필요
+    public boolean reloadPDP(String pdpName) {
+        try {
+            PDP pdp = getPDPNewInstance(pdpName);
+            pdpHashMap.put(pdpName, pdp);
+            return true;
+        } catch (Exception e){
+            return false;
+        }
+    }
+
     private void initBalana(){
         // Set balana config file.
         String configLocation = "resources"+File.separator+"config.xml";
@@ -86,6 +152,53 @@ public class PDPInterface {
 
         // Create default instance of Balana
         balana = Balana.getInstance();
+
+        List<String> pdpNameList = getPDPNameList();
+        for (String pdpName :
+                pdpNameList) {
+            reloadPDP(pdpName);
+        }
+    }
+
+    private List<String> getPDPNameList() {
+        Statement stmt = null;
+        ResultSet rs = null;
+        String query = "SELECT name FROM pdp";
+        List<String> pdpNameList = new LinkedList<>();
+        try {
+            stmt = conn.createStatement();
+            rs = stmt.executeQuery(query);
+            while (rs.next()) {
+                String fileLoc = rs.getString(1);
+                pdpNameList.add(fileLoc);
+            }
+
+        } catch (SQLException ex) {
+//                System.out.println("SQLException: " + ex.getMessage());
+//                System.out.println("SQLState: " + ex.getSQLState());
+//                System.out.println("VendorError: " + ex.getErrorCode());
+        } finally {
+            if (rs != null) {
+                try {
+                    rs.close();
+                } catch (SQLException sqlEx) {
+                } // ignore
+
+                rs = null;
+            }
+
+            if (stmt != null) {
+                try {
+                    stmt.close();
+                } catch (SQLException sqlEx) {
+                } // ignore
+
+                stmt = null;
+            }
+        }
+
+        return pdpNameList;
+
     }
 
 

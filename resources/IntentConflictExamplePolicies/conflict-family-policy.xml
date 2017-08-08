@@ -24,11 +24,11 @@
         <AdviceExpressions>
             <AdviceExpression AdviceId="permit-time-range-advice2" AppliesTo="Permit">
                 <AttributeAssignmentExpression AttributeId="urn:oasis:names:tc:xacml:2.0:example:attribute:text">
-                    <AttributeValue DataType="http://www.w3.org/2001/XMLSchema#string">Permit: You can start car if you
-                        are the family member.
+                    <AttributeValue DataType="http://www.w3.org/2001/XMLSchema#string">Permit: You can start car if you are the family member.
                     </AttributeValue>
                 </AttributeAssignmentExpression>
             </AdviceExpression>
         </AdviceExpressions>
     </Rule>
 </Policy>
+

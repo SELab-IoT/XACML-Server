@@ -20,8 +20,10 @@ public class PDPServer {
     }
 
     // Thread-safe singleton
-    private PDPServer() {}
-    private static class Singleton{
+    private PDPServer() {
+    }
+
+    private static class Singleton {
         private static final PDPServer instance = new PDPServer();
     }
 
@@ -29,6 +31,7 @@ public class PDPServer {
     public void startServer() throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress(8000), 0);
         server.createContext("/evaluate", new EvaluateHandler());
+        server.createContext("/reload", new ReloadHandler());
         server.start();
         System.out.println("Start PDPServer");
     }
@@ -46,7 +49,6 @@ public class PDPServer {
             try {
                 inputString = read(inputStream);
                 JsonObject inputJson = gson.fromJson(inputString, JsonObject.class);
-                String requestBody = inputJson.get("body").getAsString();
 
                 // Debug Observer
                 System.out.println("Request: " + inputString);
@@ -61,20 +63,23 @@ public class PDPServer {
                 }*/
 
 
-                // 1. JSON 에서 PEP ID 가져옴
+                        // 1. JSON 에서 XACML request를 가져옴
+                        String requestBody = inputJson.get("body").getAsString();
+
+                // 2. JSON 에서 PEP ID 가져옴
                 String pepId = null;
                 if (inputJson.get("pepId") != null)
                     pepId = inputJson.get("pepId").getAsString();
 
-                // 2. PEP ID를 통해 config.xml 에서 pdp 설정을 선택하고
+                // 3. PEP ID를 통해 config.xml 에서 pdp 설정을 선택하고
                 // 해당 설정의 PDP를 생성하고 XACML 리퀘스트를 보냄
                 String response = evaluateRequest(requestBody, pepId);
 
-                //2.1. Error Handling
-                if(response == null)
+                // 3.1. Error Handling
+                if (response == null)
                     httpResponse(400, httpExchange, "Invalid Request");
 
-                // 3. Return XACML Response
+                // 4. Return XACML Response
                 httpResponse(200, httpExchange, response);
 
             } catch (IOException e) {
@@ -83,20 +88,44 @@ public class PDPServer {
         }
 
         private String evaluateRequest(String request, String pepId) {
-            return !(request.isEmpty() || request==null) ? pdpInterface.evaluate(request, pepId) : null;
+            return !(request.isEmpty() || request == null) ? pdpInterface.evaluate(request, pepId) : null;
         }
 
-        private void httpResponse(int code, HttpExchange httpExchange, String response){
-            try {
-                httpExchange.sendResponseHeaders(200, response.getBytes().length);
-                OutputStream os = httpExchange.getResponseBody();
-                os.write(response.getBytes());
-                os.close();
-            } catch(IOException e) {
-                e.printStackTrace();
-            }
+    }
+
+    public class ReloadHandler implements HttpHandler {
+
+        @Override
+        public void handle(HttpExchange httpExchange) throws IOException {
+            Gson gson = new GsonBuilder().create();
+            InputStream inputStream = httpExchange.getRequestBody();
+            String inputString = read(inputStream);
+            JsonObject inputJson = gson.fromJson(inputString, JsonObject.class);
+            String pdpName = null;
+            if (inputJson.get("pdpName") != null)
+                pdpName = inputJson.get("pdpName").getAsString();
+            else
+                httpResponse(400, httpExchange, "Invalid Request");
+
+            boolean isSuccess = PDPInterface.getInstance().reloadPDP(pdpName);
+            if (isSuccess)
+                httpResponse(200, httpExchange, "reload Success");
+            else
+                httpResponse(400, httpExchange, "Not Found PDP Name");
+
         }
 
+    }
+
+    private void httpResponse(int code, HttpExchange httpExchange, String response) {
+        try {
+            httpExchange.sendResponseHeaders(code, response.getBytes().length);
+            OutputStream os = httpExchange.getResponseBody();
+            os.write(response.getBytes());
+            os.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     public String read(InputStream inputStream) throws IOException {
