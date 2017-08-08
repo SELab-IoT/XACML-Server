@@ -1,11 +1,14 @@
 package httpServer;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
 import org.wso2.balana.*;
 import org.wso2.balana.attr.AttributeFactory;
 import org.wso2.balana.combine.CombiningAlgFactory;
 import org.wso2.balana.cond.FunctionFactoryProxy;
 
-import java.io.File;
+import java.io.*;
 import java.sql.*;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -24,8 +27,11 @@ public class PDPInterface {
     }
     private PDPInterface() {
         try {
+            JsonObject confJson = getDatabaseConf("resources/database/conf.json");
+            String userName = confJson.get("username").getAsString();
+            String password = confJson.get("password").getAsString();
             conn = DriverManager.getConnection("jdbc:mysql://localhost:3306/pdp?autoReconnect=true&useSSL=false&" +
-                    "user=finder&password=asdasd");
+                    "user=" + userName + "&password=" + password);
             pdpHashMap = new HashMap<>();
         } catch (SQLException e) {
             conn = null;
@@ -33,6 +39,30 @@ public class PDPInterface {
         }
 
         initBalana();
+    }
+    private JsonObject getDatabaseConf(String loc) {
+        File confFile = new File(loc);
+        String confString = readFromFile(confFile);
+        Gson gson = new GsonBuilder().create();
+        JsonObject confJson = gson.fromJson(confString, JsonObject.class);
+        return confJson;
+    }
+    private String readFromFile(File file) {
+        BufferedReader br = null;
+        try {
+            br = new BufferedReader(new FileReader(file));
+            String line;
+            String totalLine = "";
+            while ((line = br.readLine()) != null) {
+                totalLine += line;
+            }
+            return totalLine;
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return null;
     }
     private static class Singleton{
         private static final PDPInterface instance = new PDPInterface();
